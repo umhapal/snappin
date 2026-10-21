@@ -29,6 +29,19 @@ Default hotkeys (all rebindable in Settings): `Ctrl+1` capture, `Ctrl+2` pin, `C
 
 Windows 10/11, x86-64. The capture, recording, UIA and clipboard paths are all Win32-specific, so there is no other supported platform yet.
 
+## Releases
+
+Prebuilt Windows binaries are published on the [Releases page](https://github.com/umhapal/snappin/releases).
+
+| Asset | What it is |
+|---|---|
+| `snappin-v0.1.0-windows-x64.exe` | Portable build — no installer, runs from any folder |
+| `snappin-ocr-engine-v0.1.0.zip` | The OCR engine (ONNX Runtime + PP-OCRv5 models) |
+
+To enable OCR, unzip the engine archive so that `onnxruntime.dll` and the `.onnx` models end up in `engines/oar-ocr/` **next to the executable**. If the executable lives in a read-only location (e.g. `Program Files`), put the same folder in `%LOCALAPPDATA%\snappin\engines\oar-ocr\` instead, or point `SNAPPIN_OCR_ENGINE_DIR` at it.
+
+Recording needs `ffmpeg` on `PATH` (or `SNAPPIN_FFMPEG` pointing at it). Everything else works out of the box.
+
 ## Build from source
 
 Prerequisites:
@@ -106,6 +119,16 @@ Two environment variables override the on-disk defaults:
 ## Contributing
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
+
+## Third-party components
+
+| Component | License | Used for |
+|---|---|---|
+| [ONNX Runtime](https://github.com/microsoft/onnxruntime) | MIT | OCR inference runtime |
+| [PP-OCRv5](https://github.com/PaddlePaddle/PaddleOCR) (via `oar-ocr`) | Apache-2.0 | Chinese and Latin text detection and recognition |
+| [FFmpeg](https://ffmpeg.org) | LGPL/GPL, depending on the build | Screen recording, GIF transcoding |
+| [Tauri](https://tauri.app) 2, [React](https://react.dev) | MIT / Apache-2.0 | App shell and overlay UI |
+| `tiny_http`, `arboard`, `windows-rs`, `image` | MIT / Apache-2.0 | HTTP server, clipboard, Win32 bindings, image encoding |
 
 ## License
 

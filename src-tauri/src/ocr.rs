@@ -51,7 +51,8 @@ const DICT_FILE: &str = "ppocrv5_dict.txt";
 
 /// 引擎资源目录（onnxruntime.dll + 模型缓存）。
 ///
-/// 顺序：环境变量 `SNAPPIN_OCR_ENGINE_DIR` → exe 同级 `engines/oar-ocr` → 工作目录同名。
+/// 顺序：环境变量 `SNAPPIN_OCR_ENGINE_DIR` → exe 同级 `engines/oar-ocr`（便携安装）→
+/// `%LOCALAPPDATA%\snappin\engines\oar-ocr`（装到 Program Files 时 exe 旁不可写）。
 /// why-not 写死某台开发机的绝对路径：换机器/换用户即失效，而这三档已覆盖常见装法。
 fn engine_dir() -> PathBuf {
     if let Ok(dir) = std::env::var("SNAPPIN_OCR_ENGINE_DIR") {
@@ -63,7 +64,16 @@ fn engine_dir() -> PathBuf {
         .ok()
         .and_then(|p| p.parent().map(|d| d.to_path_buf()))
     {
-        return exe_dir.join("engines").join("oar-ocr");
+        let dir = exe_dir.join("engines").join("oar-ocr");
+        if dir.exists() {
+            return dir;
+        }
+    }
+    if let Some(local) = std::env::var_os("LOCALAPPDATA") {
+        return PathBuf::from(local)
+            .join("snappin")
+            .join("engines")
+            .join("oar-ocr");
     }
     PathBuf::from("engines").join("oar-ocr")
 }
