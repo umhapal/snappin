@@ -42,7 +42,7 @@ Prebuilt Windows binaries are published on the [Releases page](https://github.co
 
 | Asset | What it is |
 |---|---|
-| `snappin-v0.1.0-windows-x64.exe` | Portable build — no installer, runs from any folder |
+| `snappin-v0.1.0-windows-x64.zip` | Portable build — no installer, runs from any folder |
 | `snappin-ocr-engine-v0.1.0.zip` | The OCR engine (ONNX Runtime + PP-OCRv5 models) |
 
 To enable OCR, unzip the engine archive so that `onnxruntime.dll` and the `.onnx` models end up in `engines/oar-ocr/` **next to the executable**. If the executable lives in a read-only location (e.g. `Program Files`), put the same folder in `%LOCALAPPDATA%\snappin\engines\oar-ocr\` instead, or point `SNAPPIN_OCR_ENGINE_DIR` at it.
@@ -57,7 +57,12 @@ Prerequisites:
 - Node.js 20+ (or Bun)
 - WebView2 runtime — preinstalled on Windows 11
 - `ffmpeg` on `PATH` — only needed for recording
-- The ONNX Runtime DLL — only needed for OCR; the engine can fetch it on first use
+- The ONNX Runtime DLL — only needed for OCR; it is **not** downloaded for you. Download
+  the `snappin-ocr-engine` archive from the Releases page and unpack it into
+  `engines/oar-ocr/` next to the executable (or into `%LOCALAPPDATA%\snappin\engines\oar-ocr\`,
+  or wherever `SNAPPIN_OCR_ENGINE_DIR` points). The PP-OCRv5 model files inside that
+  archive are the ones the app will use; without them the app tries to fetch the models
+  from ModelScope on first use, but it cannot fetch the ONNX Runtime DLL.
 
 ```bash
 npm install
