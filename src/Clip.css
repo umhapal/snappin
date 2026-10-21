@@ -1,0 +1,482 @@
+/* SnapPin 剪贴板历史面板样式（Clip）—— 全部走 theme.css token，禁止裸色值。
+   语境：规范 §1 的「面板」类（浅色卡片），与配置窗/贴图卡同一套语言。
+
+   窗口事实（src-tauri/src/commands.rs::build_clip_window）：360×520、decorations(false)、
+   shadow(true)、**未开 transparent** —— 窗不透明，所以这里不做外圈假圆角（会在四角露出
+   窗底白色）。面板铺满窗口，视觉层次靠内层卡片（--shadow-sm + 边框）表达。
+   若后续给 clip 窗补 .transparent(true)（一行，src-tauri 侧），可把 .clip-root 的
+   border-radius 与外侧阴影打开，得到真·浮层观感。 */
+
+* {
+  box-sizing: border-box;
+}
+
+/* 只保留与 App.css 完全一致的中性重置，不写任何视觉属性。
+
+   ⚠️ 这里原本还有一组 `body { background/color/font-* }`——**跨窗口污染实测**：
+   src/main.tsx 会把 App/Overlay/Pin/Ball/Clip 全部导入，各组件的 CSS 因此注入到**每个窗口**，
+   这段 body 规则会盖到配置窗上：App.css 不设 body 字号 → 浏览器默认 16px，被这里改成 13px，
+   设置页所有行标题整体缩小（实测 16px → 13px）。故视觉样式一律下沉到 .clip-root。
+   面板是 100% 铺满窗口的，窗底/四角由 .clip-root 自己上色，不需要 body 兜底。 */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+}
+
+/* ===== 根 =====
+   字号/字体/颜色全写在 .clip-root 而不是 body：见上面的跨窗口污染说明。 */
+.clip-root {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+  background: var(--panel-bg);
+  color: var(--text-body);
+  font-family: system-ui, "Segoe UI", "Microsoft YaHei", sans-serif;
+  font-size: var(--fs-base);
+  line-height: var(--lh-base);
+  user-select: none;
+}
+
+/* ===== 标题栏（整条可拖动，按钮除外） ===== */
+.clip-header {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  height: 40px;
+  padding: 0 var(--sp-3) 0 var(--sp-5);
+  border-bottom: 1px solid var(--border-weak);
+  cursor: move;
+}
+
+.clip-title {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  flex: 1;
+  min-width: 0;
+  font-size: var(--fs-base);
+  font-weight: 600;
+  color: var(--text-title);
+}
+
+.clip-title svg {
+  width: 15px;
+  height: 15px;
+  color: var(--text-muted);
+}
+
+/* 标题栏按钮：清空（危险文字钮）与关闭（图标钮）共用底座 */
+.clip-hbtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-1);
+  height: 24px;
+  padding: 0 var(--sp-2);
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard), color var(--dur-fast) var(--ease-standard);
+}
+
+.clip-hbtn:hover {
+  background: var(--card-sunken);
+  color: var(--text-body);
+}
+
+.clip-hbtn:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+.clip-hbtn.danger:hover {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+/* 二次确认态（清空需点两次）：红底白字，一眼看出「再点就没了」 */
+.clip-hbtn.danger.confirming {
+  background: var(--danger);
+  color: #fff;
+}
+
+.clip-hbtn.danger.confirming:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+.clip-hbtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ===== 搜索 ===== */
+.clip-search {
+  position: relative;
+  padding: var(--sp-4) var(--sp-5) 0;
+}
+
+.clip-search svg {
+  position: absolute;
+  left: calc(var(--sp-5) + var(--sp-2));
+  /* 容器有上内边距：图标按「输入框中心」定位（10px 内边距 + 32px 高的一半），
+     用容器 50% 会因为多出的内边距整体偏低 1px（2026-09-24 量测：67 vs 66）。 */
+  top: calc(var(--sp-4) + 16px);
+  transform: translateY(-50%);
+  width: 14px;
+  height: 14px;
+  color: var(--text-faint);
+  pointer-events: none;
+}
+
+.clip-search input {
+  width: 100%;
+  height: 32px;
+  padding: 0 var(--sp-3) 0 30px;
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-input);
+  background: var(--card-bg);
+  color: var(--text-body);
+  font-family: inherit;
+  font-size: var(--fs-base);
+  outline: none;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.clip-search input::placeholder {
+  color: var(--text-faint);
+}
+
+.clip-search input:focus {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* ===== 列表 ===== */
+.clip-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--sp-3) var(--sp-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.clip-list.is-compact {
+  gap: var(--sp-1);
+}
+
+/* 滚动条：细、无按钮、悬停才明显（WebView2 = Chromium 内核） */
+.clip-list::-webkit-scrollbar {
+  width: 10px;
+}
+
+.clip-list::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-chip);
+}
+
+.clip-list::-webkit-scrollbar-thumb:hover {
+  background: var(--text-faint);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+/* ===== 条目卡 ===== */
+.clip-item {
+  position: relative;
+  padding: var(--sp-3) var(--sp-4);
+  border: 1px solid var(--border-weak);
+  border-radius: 10px;
+  background: var(--card-bg);
+  cursor: pointer;
+  outline: none;
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard),
+    box-shadow var(--dur-fast) var(--ease-standard);
+}
+
+.clip-item:hover {
+  background: var(--card-hover);
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-sm);
+}
+
+.clip-item:focus-visible {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* 选中（键盘焦点 / 单击档单击后）：蓝描边，与 hover 的灰描边区分开 */
+.clip-item.is-active {
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* 已写回剪贴板：绿底闪一下（由 tsx 的 1.2s 计时器控制，不是常驻态） */
+.clip-item.is-copied {
+  background: var(--success-soft);
+  border-color: var(--success);
+}
+
+/* 已固定：中性一档的底 + 常驻黄星。
+   2026-09-24 评审两轮：琥珀色底与冷色（白/灰/蓝）体系不协调，且与黄星对比不足；
+   改中性底（--card-sunken），语义交给常驻的琥珀星——底色只负责「这行不一样」，
+   颜色语义不重复。已复制是瞬时态，优先于固定底色。 */
+.clip-item.is-pinned:not(.is-copied) {
+  background: var(--card-sunken);
+}
+
+/* 固定态悬停不再提亮：底已经是「下沉」色，提亮会读成取消固定 */
+.clip-item.is-pinned:not(.is-copied):hover {
+  background: var(--card-sunken);
+  border-color: var(--border-strong);
+}
+
+/* 紧凑档：行内边距 8→4px（上）、10→6px（横），配合更小的卡间距与 2 行截断，
+   密度差要看得出来才有意义（6px 只比舒适档少 2px，肉眼几乎无感）。
+   数值同时被 check-14 钉住（paddingTop 紧凑 4px / 舒适 8px），改这里要同步改断言。 */
+.clip-list.is-compact .clip-item {
+  padding: var(--sp-1) var(--sp-2);
+}
+
+/* ===== 卡内元信息行 ===== */
+.clip-item-top {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-2);
+  min-height: 18px;
+}
+
+/* 类型标签：图标 + 文字，**不做胶囊底**——每张卡都顶一个色块会把「内容」压成次要，
+   列表整体噪音也大（2026-09-24 评审：视觉噪音过大、层级不清）。 */
+.clip-type {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+.clip-type svg {
+  width: 12px;
+  height: 12px;
+}
+
+.clip-time {
+  color: var(--text-faint);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+/* 已复制/已粘贴提示 */
+.clip-flash {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  color: var(--success-text);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+}
+
+.clip-flash svg {
+  width: 11px;
+  height: 11px;
+}
+
+.clip-spacer {
+  flex: 1;
+}
+
+/* 卡内图标按钮（固定 / 删除）：常态隐去，悬停或键盘聚焦时出现，列表才安静 */
+.clip-ibtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease-standard), background var(--dur-fast) var(--ease-standard),
+    color var(--dur-fast) var(--ease-standard);
+}
+
+.clip-item:hover .clip-ibtn,
+.clip-item:focus-within .clip-ibtn {
+  opacity: 1;
+}
+
+.clip-ibtn:hover {
+  background: var(--card-sunken);
+  color: var(--text-body);
+}
+
+.clip-ibtn:focus-visible {
+  opacity: 1;
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* 固定态：常驻可见（用户要能一眼看出哪条被钉住），且用警告黄 */
+.clip-ibtn.is-pinned {
+  opacity: 1;
+  color: var(--warn-text);
+}
+
+.clip-ibtn.is-pinned:hover {
+  background: var(--warn-soft);
+  color: var(--warn-text);
+}
+
+.clip-ibtn.is-delete:hover {
+  background: var(--danger-soft);
+  color: var(--danger-text);
+}
+
+.clip-ibtn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ===== 卡内内容 ===== */
+.clip-body {
+  margin-top: var(--sp-2);
+  color: var(--text-body);
+  font-size: var(--fs-sm);
+  line-height: var(--lh-base);
+  white-space: pre-wrap;
+  word-break: break-all;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
+  overflow: hidden;
+}
+
+.clip-list.is-compact .clip-body {
+  margin-top: var(--sp-1);
+  -webkit-line-clamp: 2;
+}
+
+/* 文件条目：路径列表，行距收紧、颜色次要 */
+.clip-body.is-paths {
+  color: var(--text-muted);
+}
+
+.clip-body.is-image {
+  display: flex;
+  justify-content: center;
+  margin-top: var(--sp-2);
+}
+
+.clip-thumb {
+  display: block;
+  max-width: 100%;
+  max-height: 96px;
+  object-fit: contain;
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-input);
+  background: var(--card-sunken);
+}
+
+.clip-list.is-compact .clip-thumb {
+  max-height: 64px;
+}
+
+/* ===== 空态 ===== */
+.clip-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  flex: 1;
+  padding: var(--sp-6) var(--sp-5);
+  text-align: center;
+}
+
+.clip-empty svg {
+  width: 30px;
+  height: 30px;
+  color: var(--border-strong);
+}
+
+.clip-empty-title {
+  color: var(--text-muted);
+  font-size: var(--fs-base);
+}
+
+.clip-empty-hint {
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+  max-width: 240px;
+}
+
+/* ===== 底栏 ===== */
+.clip-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-4);
+  height: 32px;
+  padding: 0 var(--sp-5);
+  border-top: 1px solid var(--border-weak);
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+/* 提示组：每条一个 <span>，用间距分组，不再拿 `·` 当分隔符串成一坨
+   （2026-09-24 评审：底栏「像一串未格式化的纯文本」）。 */
+.clip-foot-hints {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-3);
+  color: var(--text-faint);
+  overflow: hidden;
+}
+
+.clip-foot-hints > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.clip-foot kbd {
+  display: inline-block;
+  padding: 0 4px;
+  border: 1px solid var(--border-weak);
+  border-bottom-width: 2px;
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 14px;
+}
+
+/* 尊重系统「减少动效」：只留颜色变化，不做过渡 */
+@media (prefers-reduced-motion: reduce) {
+  .clip-item,
+  .clip-hbtn,
+  .clip-ibtn,
+  .clip-search input {
+    transition: none;
+  }
+}

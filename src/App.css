@@ -1,0 +1,346 @@
+/* 配置窗（一体化，左侧分类 + 右侧内容，浅色）—— docs/UI设计规范.md §5 */
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+}
+/* body 只留「全局字体 / 文字色 / 抗锯齿」这类**有意全局**的属性。
+   ⚠️ 背景不能写在这里（2026-09-24 自查）：Overlay.css 要求 html/body 透明——覆盖层是
+   全屏透明窗，谁往 body 写背景，谁就得靠**打包顺序**才能赢。实测本行 `background:
+   var(--panel-bg)` 已被 Overlay.css 的 transparent 覆盖（body 实测 rgba(0,0,0,0)），
+   即它是死行；但顺序一变它会让覆盖层变成不透明灰窗。故背景下放到 .settings。 */
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, "Microsoft YaHei", sans-serif;
+  color: var(--text-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+.settings {
+  display: grid;
+  grid-template-columns: 200px 1fr; /* 左:右 ≈ 1:3 */
+  height: 100vh;
+  background: var(--panel-bg);
+}
+
+.nav {
+  background: var(--panel-bg);
+  border-right: 1px solid var(--border-weak);
+  display: flex;
+  flex-direction: column;
+  padding: 12px 8px;
+}
+.nav-title {
+  font-weight: 600;
+  color: var(--text-title);
+  padding: 6px 10px 12px;
+}
+.nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  flex: 1;
+  overflow-y: auto;
+}
+.nav-item {
+  padding: 8px 10px;
+  border-radius: var(--radius-btn);
+  cursor: pointer;
+  color: var(--text-body);
+  transition: background var(--dur-fast) var(--ease-standard);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 导航图标：线性风格，随选中态切换 currentColor */
+.nav-ico {
+  flex: 0 0 auto;
+  display: inline-flex;
+  opacity: 0.75;
+}
+.nav-item.active .nav-ico {
+  opacity: 1;
+}
+.nav-item:hover {
+  background: var(--card-sunken);
+}
+.nav-item.active {
+  background: var(--accent-text); /* 白字实底必须用深变体：#3b82f6 上白字只有 3.68:1 */
+  color: #fff;
+}
+.nav-item:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.reset-btn {
+  margin-top: var(--sp-3);
+  padding: var(--sp-3);
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--danger-text);
+  cursor: pointer;
+  font: inherit;
+}
+.reset-btn:hover {
+  background: var(--danger-soft);
+}
+
+.content {
+  background: var(--card-bg);
+  padding: 24px 28px;
+  overflow-y: auto;
+}
+.content h1 {
+  font-size: 20px;
+  color: var(--text-title);
+  margin: 0 0 16px;
+}
+.muted {
+  color: var(--text-muted);
+}
+.small {
+  font-size: 12px;
+}
+.placeholder {
+  margin-top: 40px;
+}
+.kv {
+  display: flex;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border-weak);
+  border-bottom: 1px solid var(--border-weak);
+  margin: 12px 0;
+}
+.kv span:first-child {
+  color: var(--text-muted);
+  min-width: 96px;
+}
+
+/* ---- 设置面板真实控件（M2.5 设置面板批） ---- */
+.saved-tip {
+  text-align: right;
+  margin-bottom: 4px;
+}
+
+.set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-6);
+  padding: var(--sp-5) 0;
+  border-bottom: 1px solid var(--border-weak);
+}
+
+.set-label > div:first-child {
+  color: var(--text-title);
+}
+
+.set-control {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  min-width: 180px;
+  justify-content: flex-end;
+}
+
+/* 开关（PixPin 式 iOS 风格） */
+.toggle {
+  width: 40px;
+  height: 22px;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--border-strong);
+  cursor: pointer;
+  position: relative;
+  transition: background var(--dur-fast) var(--ease-standard);
+  padding: 0;
+}
+.toggle:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+.toggle .knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--card-bg);
+  box-shadow: var(--shadow-sm);
+  transition: transform var(--dur-fast) var(--ease-standard);
+}
+.toggle.on {
+  background: var(--accent);
+}
+.toggle.on .knob {
+  transform: translateX(18px);
+}
+
+/* 下拉框 */
+.set-select {
+  font: inherit;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-input);
+  background: var(--card-bg);
+  color: var(--text-body);
+  min-width: 140px;
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.set-select:hover {
+  border-color: var(--border-strong);
+}
+/* 焦点态全站统一：accent 边框 + 焦点环（原来用 outline 会顶到控件边缘，与圆角打架） */
+.set-select:focus,
+.set-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* 文本输入 */
+.set-input {
+  font: inherit;
+  padding: var(--sp-2) var(--sp-3);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-input);
+  background: var(--card-bg);
+  color: var(--text-body);
+  width: 260px;
+  transition: border-color var(--dur-fast) var(--ease-standard), box-shadow var(--dur-fast) var(--ease-standard);
+}
+.set-input:hover {
+  border-color: var(--border-strong);
+}
+/* 多行输入（剪贴板「忽略来源应用」用 textarea 兜底）：纵向可拉伸，别横向撑破设置列 */
+textarea.set-input {
+  min-height: 66px;
+  line-height: var(--lh-base);
+  resize: vertical;
+}
+
+/* 输入框 + 按钮 组合行（如保存目录 + 浏览…） */
+.set-input-row {
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+}
+
+/* 次要按钮（浏览…／导出…／任何「次要动作」统一用这一个类，别再各写一套） */
+.set-button {
+  font: inherit;
+  padding: var(--sp-2) var(--sp-5);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-input);
+  background: var(--card-bg);
+  color: var(--text-body);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease-standard), border-color var(--dur-fast) var(--ease-standard);
+}
+.set-button:hover {
+  background: var(--card-sunken);
+  border-color: var(--border-strong);
+}
+.set-button:focus-visible {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: var(--focus-ring);
+}
+
+/* 范围条 */
+input[type="range"] {
+  accent-color: var(--accent);
+  width: 200px;
+}
+
+/* 色板 */
+.palette {
+  display: flex;
+  gap: 6px;
+}
+.swatch {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+.swatch.active {
+  border-color: var(--text-title);
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+/* 快捷键列表（PixPin 式：功能 — 快捷键） */
+.hk-list {
+  border-top: 1px solid var(--border-weak);
+}
+.hk-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--border-weak);
+}
+.hk-name {
+  color: var(--text-body);
+}
+.hk-key {
+  font-family: Consolas, monospace;
+  font-size: 12px;
+  color: var(--text-title);
+  background: var(--panel-bg);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-btn);
+  padding: 3px 10px;
+}
+/* 可编辑热键行：右侧动作区 */
+.hk-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* 当前热键：可点击进入捕获模式 */
+.hk-key.editable {
+  cursor: pointer;
+  transition: border-color var(--dur-fast) var(--ease-standard);
+}
+.hk-key.editable:hover {
+  border-color: var(--accent);
+}
+/* 捕获中：等待用户按下组合键 */
+.hk-key.capturing {
+  color: var(--accent);
+  border-color: var(--accent);
+  border-style: dashed;
+}
+/* 恢复默认小按钮 */
+.hk-reset {
+  border: none;
+  background: transparent;
+  color: var(--text-body);
+  opacity: 0.6;
+  cursor: pointer;
+  font-size: 12px;
+  padding: 2px 6px;
+  border-radius: var(--radius-btn);
+}
+.hk-reset:hover {
+  opacity: 1;
+  background: var(--card-sunken);
+}
+/* 冲突提示 */
+.hk-conflict {
+  color: var(--danger-text);
+  font-size: var(--fs-sm);
+  margin: var(--sp-2) var(--sp-1) 0;
+}

@@ -1,0 +1,122 @@
+/* SnapPin 设计 token —— 唯一视觉事实来源。规范 docs/UI设计规范.md §2。
+   数值来自 PixPin 参考图（refs/ui/）实测与取色，非凭空拟定。
+
+   两套语境（规范 §1）：
+     ① 覆盖层 = 屏幕上的浮动 chrome（工具条/录屏条/提示卡），白底浮条 + 深色局部；
+     ② 面板   = 配置窗 / 剪贴板面板 / 贴图卡，浅色卡片。
+   组件 CSS 只消费 token：禁止裸色值、裸圆角、裸时长（新增需求先在下面补 token）。
+   组件级局部 token（遮罩暗度、Popover 底等只在单文件用的）留在各自文件顶部，别污染这里。
+
+   2026-09-24 视觉翻新：补语义层（surface/text/border 阶梯、状态色、阴影阶梯、间距、字阶、
+   焦点环），让面板不必再就地硬编码颜色。既有 token 名与值全部保留，Overlay.css/App.css 零回归。 */
+:root {
+  /* ===== 品牌 ===== */
+  --accent: #3b82f6;
+  --accent-hover: #2d7ff9;
+  --accent-soft: rgba(59, 130, 246, 0.1); /* 选中底 / 软高亮 */
+  --accent-ring: rgba(59, 130, 246, 0.45); /* 选中描边 / 焦点环 */
+  --rec-red: #ff3b30;
+
+  /* ===== 覆盖层（浅色浮动卡片，截图/录屏用，对齐 PixPin 参考图） ===== */
+  --overlay-bg: #ffffff;
+  --overlay-icon: #333333;
+  --overlay-icon-active: #111111;
+  --overlay-hover: #f0f0f0;
+  --overlay-divider: #e0e0e0;
+  --overlay-border: #e0e0e0;
+  --overlay-shadow: 0 2px 12px rgba(0, 0, 0, 0.18);
+  --overlay-radius: 8px;
+
+  /* ===== 选区 ===== */
+  --sel-border: #3b82f6;
+  --sel-handle-fill: #ffffff;
+
+  /* ===== 面板语义层（配置窗 / 剪贴板面板 / 贴图卡） =====
+     阶梯：panel(最底) → card(卡面) → card-hover(悬停) → sunken(输入框/代码底)。 */
+  --panel-bg: #f5f5f7;
+  --card-bg: #ffffff;
+  --card-hover: #f7f8fa;
+  --card-sunken: #f1f2f4;
+
+  /* 文字阶梯：title(标题) → body(正文) → muted(次要) → faint(最弱但仍达标)
+     对比度实测（2026-09-24，白卡 / 面板 / 固定态中性底 #f1f2f4 三种底）：
+     title 17.4/16.0/15.5、body 12.6/11.6/11.3、muted 7.6/6.9/6.8、faint 5.2/4.8/4.7
+     —— 全部 ≥4.5:1（WCAG AA 正文标准）。
+     旧值 #6b7280(4.4)/#9ca3af(2.3) 不达标；faint 首版 #667085 在固定态底上只有 4.44，
+     是给固定态换中性底之后才暴露的（只测白底会漏）。 */
+  --text-title: #1a1a1a;
+  --text-body: #333333;
+  --text-muted: #4b5563;
+  --text-faint: #636d80;
+
+  /* 边框阶梯：weak(默认分隔) → strong(强调/悬停) */
+  --border-weak: #e5e7eb;
+  --border-strong: #d1d5db;
+
+  /* 状态色（面板用；覆盖层的录制红走 --rec-red） */
+  --danger: #ef4444;
+  --danger-soft: rgba(239, 68, 68, 0.08);
+  --success: #16a34a;
+  --success-soft: rgba(22, 163, 74, 0.12);
+  --warn: #d97706;
+  --warn-soft: rgba(217, 119, 6, 0.12);
+
+  /* 文本/实底变体：品牌色本身是给边框、描边、图标用的（非文本，3:1 即可），
+     一旦拿来当「浅底上的文字」或「承载白字的实底」就不达标——
+     #3b82f6 上白字只有 3.68:1、#ef4444 当文字只有 3.46:1（2026-09-24 实测）。
+     需要文字可读时一律用下面这组深色变体（均 ≥5:1）。 */
+  --accent-text: #2563eb; /* 5.17:1 白底 */
+  --danger-text: #c92a2a; /* 5.01:1 面板底 */
+  --success-text: #15803d; /* 5.02:1 白底 */
+  --warn-text: #b45309; /* 5.02:1 白底 */
+
+  /* 阴影阶梯：sm(卡面/悬停) → md(浮层) → lg(独立面板窗) */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 2px 8px rgba(0, 0, 0, 0.1);
+  --shadow-lg: 0 8px 28px rgba(0, 0, 0, 0.16);
+  /* 品牌色投影：主按钮（悬浮条蓝圆钮）那圈带色的浮起感，原是散落在 Overlay.css 的裸值 */
+  --shadow-accent: 0 2px 8px rgba(59, 130, 246, 0.45);
+
+  /* 焦点环（键盘可达性；键盘导航必须看得见） */
+  --focus-ring: 0 0 0 2px var(--accent-ring);
+
+  /* ===== 圆角 ===== */
+  --radius-bar: 999px; /* 浮动工具条 = 胶囊 */
+  --radius-btn: 6px; /* 条内按钮小圆角 */
+  --radius-card: 16px; /* 卡片 / 配置窗 */
+  --radius-panel: 12px; /* 独立面板窗（剪贴板） */
+  --radius-input: 8px; /* 输入框 / 搜索框 */
+  --radius-chip: 999px; /* 类型标签 */
+
+  /* ===== 间距（4 的倍数，禁止就地写 2/3/5/7 这类随手值） ===== */
+  --sp-1: 4px;
+  --sp-2: 6px;
+  --sp-3: 8px;
+  --sp-4: 10px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+
+  /* ===== 字阶 ===== */
+  --fs-xs: 11px; /* 元信息 / 底栏 */
+  --fs-sm: 12px; /* 次要说明 */
+  --fs-base: 13px; /* 正文 / 控件 */
+  --fs-md: 14px; /* 小标题 */
+  --fs-lg: 16px; /* 页面标题 */
+  --lh-tight: 1.35;
+  --lh-base: 1.5;
+
+  /* ===== 尺寸（2026-09-21 整体放大一档：用户反馈工具条图标与文字太小。
+     覆盖层是透明置顶窗，图标压在真实桌面内容上，观感比普通 UI 更小，
+     故 --icon/--btn/--bar-h 各 +2/+4/+4px。经全仓 grep 确认这三个 token
+     只有 Overlay.css 的 .overlay-toolbar / .overlay-tool 消费，无复用冲突。） ===== */
+  --icon: 18px;
+  --btn: 32px;
+  --gap: 8px;
+  --bar-h: 48px;
+
+  /* ===== 运动（禁止裸 duration/ease，统一走 token） ===== */
+  --dur-fast: 120ms;
+  --dur-base: 200ms;
+  --dur-slow: 280ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+}

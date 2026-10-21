@@ -1,0 +1,91 @@
+[package]
+name = "snappin"
+version = "0.1.0"
+description = "Windows screen capture, recording, pinning and clipboard toolkit with a local HTTP API"
+authors = ["umhapal"]
+license = "MIT"
+edition = "2021"
+repository = "https://github.com/umhapal/snappin"
+homepage = "https://github.com/umhapal/snappin"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[lib]
+# The `_lib` suffix may seem redundant but it is necessary
+# to make the lib name unique and wouldn't conflict with the bin name.
+# This seems to be only an issue on Windows, see https://github.com/rust-lang/cargo/issues/8519
+name = "snappin_lib"
+# 仅桌面（Windows）：只留 rlib。cdylib 会把全部符号导出，
+# 触发 PE 65535 导出上限（Tauri 依赖庞大）。移动端才需要 cdylib/staticlib。
+crate-type = ["rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# protocol-asset：保存条回放用 asset:// 协议读产物（mp4/gif 预览），scope 运行时
+# allow_directory 授权（commands.rs::allow_asset_captures），配置里 assetProtocol.enable 必须同步开。
+tauri = { version = "2", features = ["tray-icon", "image-png", "custom-protocol", "devtools", "protocol-asset"] }
+tauri-plugin-opener = "2"
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 诊断用：把 tauri/wry/tao 内部被吞掉的错误（如建窗失败只走 log::error!）落到 stderr。
+log = "0.4"
+tiny_http = "0.12"
+rand = "0.8"
+base64 = "0.22"
+image = { version = "0.25", default-features = false, features = ["png", "jpeg"] }
+arboard = "3"
+# WGC（Windows Graphics Capture）窗口捕获：agent 窗口模式静态截图的主路径（capture.rs）。
+# Phase 0 spike 实测：GNU 工具链（本机无 MSVC）编译/链接/运行通过，能抓到被完全遮挡的窗口内容。
+# 它内部依赖 windows 0.62.2，与本仓的 windows 0.58 并存（两个 major 不冲突）。
+windows-capture = "2.0.1"
+windows = { version = "0.58", features = [
+  "Win32_Foundation",
+  "Win32_Networking_WinSock",
+  "Win32_Graphics_Gdi",
+  "Win32_Graphics_Dwm",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_UI_HiDpi",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_Storage_Xps",
+  "Win32_UI_Accessibility",
+  "Win32_System_Com",
+  # 剪贴板历史（clip.rs）：监听/读写走 DataExchange，CF_HDROP 走 Ole。
+  "Win32_System_DataExchange",
+  "Win32_System_Ole",
+  "Win32_System_Threading",
+  "Win32_System_Memory",
+  "Win32_Security",
+  "Win32_UI_Shell",
+  # 原生「另存为」对话框（IFileSaveDialog）的文件类型过滤器用 COMDLG_FILTERSPEC，
+  # 它单独挂在 Shell_Common 子 feature 下（Win32_UI_Shell 不隐含它）。
+  "Win32_UI_Shell_Common",
+  # 窗口录屏的系统声音：WASAPI loopback 采集默认渲染端点（loopback.rs）。
+  # why-not 靠 ffmpeg 采系统声：ffmpeg 上游没有 wasapi 采集设备（trac #9408 状态 new），
+  # 本机 6 个 ffmpeg 构建实测全都没有 → 只能 Rust 侧抓 PCM 再喂 ffmpeg。
+  "Win32_Media_Audio",
+  # loopback 采集线程把 PCM 写进命名管道，ffmpeg 作为客户端读它。
+  "Win32_System_Pipes",
+  # why-not 只加 Pipes：`PIPE_ACCESS_OUTBOUND` 与 `WriteFile` 实际挂在 Storage_FileSystem
+  # 下（已实测：Pipes 模块里只有 PIPE_TYPE_* / PIPE_WAIT），漏了它编译必挂。
+  "Win32_Storage_FileSystem",
+  # 同理：`CancelIoEx` / `GetOverlappedResult` / `OVERLAPPED` 挂在 System_IO（不在 Pipes）。
+  "Win32_System_IO",
+] }
+# OCR：原生 Rust 引擎 oar-ocr（PP-OCRv5 中文模型）。本机仅 GNU 工具链，ort-sys 无 GNU 预编译
+# 二进制，故禁默认 download-binaries，改用 ort 的 load-dynamic 运行时加载 onnxruntime.dll
+# （已实测在 x86_64-pc-windows-gnu 链接通过）。auto-download 让 bare 名模型首次联网拉取到 OAR_HOME。
+oar-ocr = { version = "0.9", default-features = false, features = ["simd", "auto-download"] }
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["load-dynamic", "ndarray"] }
+
+
+# Read the optimization guideline for more details: https://tauri.app/concept/size/#cargo-configuration
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+panic = "abort"
+strip = true

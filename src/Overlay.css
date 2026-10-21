@@ -1,0 +1,824 @@
+/* SnapPin 截图覆盖层样式 —— docs/UI设计规范.md §1.5 / §3。
+   颜色尽量走 theme.css token；theme.css 未提供的几个「覆盖层专用」值
+   （遮罩暗度、尺寸标签底、Popover 底）在此定义为组件级局部 token，
+   避免散落到 TSX 内联样式里。若后续 theme.css 补齐同名变量可上移。 */
+
+.overlay-root {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  cursor: crosshair;
+  user-select: none;
+  -webkit-user-select: none;
+
+  /* 组件级局部 token（theme.css 未覆盖的覆盖层专用色） */
+  --overlay-mask: rgba(0, 0, 0, 0.45);
+  --size-label-bg: rgba(0, 0, 0, 0.72);
+  --tip-bg: rgba(0, 0, 0, 0.86); /* 悬浮提示底：比尺寸标签更实，保证任何背景下都读得清 */
+  --size-label-fg: #ffffff;
+  --popover-bg: rgba(45, 45, 45, 0.96);
+  --popover-swatch-ring: rgba(255, 255, 255, 0.9);
+}
+
+/* 窗口是 transparent —— 根/body 必须透明，别盖住桌面 */
+html,
+body,
+#root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  background: transparent !important;
+}
+
+/* 冻结背景帧：铺满窗口，1:1 拉伸（窗口 == 虚拟屏，无宽高比失真） */
+.overlay-bg {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  pointer-events: none;
+  -webkit-user-drag: none;
+}
+
+/* 未开始框选时的整屏暗遮罩 */
+.overlay-dim {
+  position: fixed;
+  inset: 0;
+  background: var(--overlay-mask);
+  pointer-events: none;
+}
+
+/* 选区框：本体透明（露出原图），box-shadow 把选区外一圈压暗 = 挖空效果 */
+.overlay-sel {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--sel-border);
+  box-shadow: 0 0 0 100vmax var(--overlay-mask);
+  pointer-events: none;
+}
+
+/* 标注 canvas：覆盖全窗，事件穿透交给根节点处理 */
+.overlay-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+/* 左上角实时尺寸标签 */
+.overlay-size {
+  position: absolute;
+  padding: 2px 8px;
+  font: 12px/1.6 system-ui, "Segoe UI", sans-serif;
+  color: var(--size-label-fg);
+  background: var(--size-label-bg);
+  border-radius: var(--radius-btn);
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 八向控制点：白填充小方块 + 细蓝描边（PixPin 同款）*/
+.overlay-handle {
+  position: absolute;
+  z-index: 6;
+  width: 9px;
+  height: 9px;
+  margin: -5px 0 0 -5px;
+  border-radius: 2px;
+  background: var(--sel-handle-fill);
+  border: 1px solid var(--sel-border);
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.4);
+}
+.overlay-handle.nw,
+.overlay-handle.se {
+  cursor: nwse-resize;
+}
+.overlay-handle.ne,
+.overlay-handle.sw {
+  cursor: nesw-resize;
+}
+.overlay-handle.n,
+.overlay-handle.s {
+  cursor: ns-resize;
+}
+.overlay-handle.e,
+.overlay-handle.w {
+  cursor: ew-resize;
+}
+
+/* 浅色浮动工具条（白底卡片，对齐 PixPin 参考图）。
+   尺寸全部走 theme.css token：--bar-h 48 / --btn 32 / --icon 18
+   （2026-09-21 用户反馈「图标和文字太小」后整体放大一档）。 */
+.overlay-toolbar {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  height: var(--bar-h);
+  padding: 0 6px;
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--overlay-radius);
+  box-shadow: var(--overlay-shadow);
+  cursor: default;
+  z-index: 10;
+}
+
+.overlay-tool {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--btn);
+  height: var(--btn);
+  padding: 0;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--overlay-icon);
+  cursor: pointer;
+  transition: color var(--dur-fast) var(--ease-standard),
+    background var(--dur-fast) var(--ease-standard);
+}
+.overlay-tool:hover:not(:disabled):not(.active) {
+  color: var(--overlay-icon-active);
+  background: var(--overlay-hover);
+}
+.overlay-tool.active {
+  color: var(--accent);
+}
+/* active 项 hover：图标保持蓝色，背景走中性灰——白底卡片上淡蓝块看起来像误触反馈 */
+.overlay-tool.active:hover:not(:disabled) {
+  color: var(--accent);
+  background: var(--overlay-hover);
+}
+.overlay-tool.done {
+  color: var(--accent);
+}
+.overlay-tool:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+.overlay-tool svg {
+  width: var(--icon);
+  height: var(--icon);
+}
+
+/* 工具条拖动手柄（PixPin 同款 ⋮⋮）：grab 光标 + 关掉浏览器手势，
+   否则按住拖动会被 WebView2 的文本选择/滚动抢走 pointermove。 */
+.overlay-bargrip {
+  cursor: grab;
+  touch-action: none;
+}
+.overlay-bargrip:active {
+  cursor: grabbing;
+}
+
+.overlay-divider {
+  width: 1px;
+  /* 22px（原 20px）：跟着 --bar-h 48 一起长，保持「分隔线 ≈ 按钮高的 2/3」的观感 */
+  height: 22px;
+  margin: 0 3px;
+  background: var(--overlay-divider);
+}
+
+/* 录制参数下拉（帧率 / 画质）——嵌在工具条里，紧凑不占高 */
+.overlay-recsel {
+  /* 26px（原 24px）/ 13px 字号（原 12px）：与放大的 32px 按钮同屏时不显突兀，
+     GIF 模式的「10 FPS」「24 FPS」等更宽文案也不会被压扁 */
+  height: 26px;
+  padding: 0 4px;
+  border: 1px solid var(--overlay-divider);
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--overlay-icon-active);
+  font: 13px/1 system-ui, "Segoe UI", sans-serif;
+  cursor: pointer;
+  outline: none;
+}
+.overlay-recsel:hover {
+  background: var(--overlay-hover);
+}
+.overlay-recsel option {
+  color: #111;
+}
+
+/* 二级属性 Popover（颜色 + 粗细） */
+.overlay-popover {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 10px;
+  background: var(--popover-bg);
+  border-radius: var(--radius-btn);
+  box-shadow: var(--overlay-shadow);
+  cursor: default;
+  z-index: 11;
+  animation: overlay-pop var(--dur-fast) var(--ease-standard);
+}
+@keyframes overlay-pop {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.overlay-swatches {
+  display: flex;
+  gap: 6px;
+}
+.overlay-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+}
+.overlay-swatch.active {
+  border-color: var(--popover-swatch-ring);
+}
+.overlay-widths {
+  display: flex;
+  gap: 4px;
+}
+.overlay-width {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  cursor: pointer;
+}
+.overlay-width:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.overlay-width.active {
+  background: rgba(255, 255, 255, 0.16);
+}
+.overlay-width i {
+  display: block;
+  border-radius: 999px;
+  background: #ffffff;
+}
+
+/* 文字标注输入框 */
+.overlay-textedit {
+  position: absolute;
+  min-width: 24px;
+  margin: 0;
+  padding: 0;
+  border: 1px dashed var(--accent);
+  background: transparent;
+  outline: none;
+  resize: none;
+  overflow: hidden;
+  line-height: 1.2;
+  font-family: system-ui, "Segoe UI", sans-serif;
+  z-index: 12;
+}
+
+/* 智能窗口检测高亮描边 */
+.overlay-winhi {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+  z-index: 5;
+}
+
+/* 智能识别标签：元素类型 / 层级 / 名称（滚轮切层、Tab 切元素/窗口）*/
+.overlay-recog {
+  position: fixed;
+  max-width: 320px;
+  padding: 2px 8px;
+  font: 12px/1.6 system-ui, "Segoe UI", sans-serif;
+  color: var(--size-label-fg);
+  background: var(--size-label-bg);
+  border-radius: var(--radius-btn);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+  z-index: 7;
+}
+
+/* 悬浮提示（自绘 tooltip，替代原生 title）：原生 tooltip 在透明置顶窗里字号小、
+   还容易被窗口边界裁掉或被工具条挡住（用户 2026-09-21 实测反馈）。这里 15px 实底、
+   z-index 高于所有覆盖层元素；越界翻转/夹紧由 Overlay.tsx::showTip 计算。 */
+.overlay-tip {
+  position: fixed;
+  max-width: 360px;
+  /* 内边距跟着字号一起长（6/12 → 8/14），15px 字挤在 6px 上下边距里会显得憋 */
+  padding: 8px 14px;
+  /* 15px（原 13px → 14px → 15px）：用户 2026-09-21 反馈「图标文字太小」——覆盖层是
+     透明置顶窗，文字压在真实桌面上对比度更低，字号必须比普通 UI 大一档才看得清。 */
+  font: 15px/1.5 system-ui, "Segoe UI", sans-serif;
+  color: var(--size-label-fg);
+  background: var(--tip-bg);
+  border-radius: var(--radius-btn);
+  box-shadow: var(--overlay-shadow);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 40;
+}
+
+/* PixPin 式放大镜：放大冻结背景像素 + 中心取样像素 + 坐标/HEX 信息条 */
+.overlay-loupe {
+  position: fixed;
+  pointer-events: none;
+  z-index: 13;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--popover-bg);
+  box-shadow: var(--overlay-shadow), 0 0 0 1px rgba(255, 255, 255, 0.25);
+}
+.overlay-loupe-canvas {
+  display: block;
+  width: 128px;
+  height: 128px;
+  image-rendering: pixelated;
+}
+.overlay-loupe-info {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 3px 6px;
+  font: 11px/1.4 ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: var(--size-label-fg);
+  background: rgba(0, 0, 0, 0.55);
+}
+.overlay-loupe-pos {
+  opacity: 0.85;
+}
+.overlay-loupe-hex {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  text-transform: uppercase;
+}
+.overlay-loupe-hex i {
+  display: block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+}
+
+/* 取景三分辅助线（选区内 1/3、2/3 处细线）*/
+.overlay-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.overlay-grid span {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.35);
+}
+.overlay-grid .v1,
+.overlay-grid .v2 {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+.overlay-grid .v1 {
+  left: 33.333%;
+}
+.overlay-grid .v2 {
+  left: 66.667%;
+}
+.overlay-grid .h1,
+.overlay-grid .h2 {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+.overlay-grid .h1 {
+  top: 33.333%;
+}
+.overlay-grid .h2 {
+  top: 66.667%;
+}
+
+/* 录制态选区边框（红框，无暗遮罩，露出实时桌面供抓录）。
+   A+（2026-09-24）：定位坐标在 Overlay.tsx 里外扩 2px（left-2/top-2/w+4/h+4），
+   整圈红压在 crop 之外 → 成品零红（check-19 断言）。**别改回 box-sizing/outline：
+   outline 不进 getBoundingClientRect，会让 rec_input_passthrough 的红框环算成空**。 */
+.overlay-recframe {
+  position: absolute;
+  box-sizing: border-box;
+  border: 2px solid #ff3b30;
+  pointer-events: none;
+  z-index: 6;
+}
+
+/* 开录倒计时：整屏拦截层（点击=取消）+ 选区中央的大号秒数。
+   z-index 必须**盖住**工具条(11)/录制条(12)/放大镜(13)/OCR 浮层(14) 才能拦住倒计时期间的
+   误操作，所以给 20；提示卡(20，pointer-events:none)与自绘 tooltip(40) 在它之上也无妨。
+   保存确认条(30) 在它之上，但两者状态互斥（倒计时要求选区已提交且未录制，确认阶段两者都不满足）。 */
+.overlay-countdown {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  background: rgba(0, 0, 0, 0.25);
+  cursor: pointer;
+}
+.overlay-countdown-num {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  font: 700 96px/1 system-ui, "Segoe UI", sans-serif;
+  color: #ffffff;
+  text-shadow: 0 2px 18px rgba(0, 0, 0, 0.75);
+  pointer-events: none;
+}
+.overlay-countdown-tip {
+  position: fixed;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  padding: 6px 14px;
+  border-radius: var(--overlay-radius);
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  box-shadow: var(--overlay-shadow);
+  color: var(--overlay-icon);
+  font: 12px/1.5 system-ui, "Segoe UI", sans-serif;
+  white-space: nowrap;
+  pointer-events: none;
+}
+
+/* 录制控制条 */
+.overlay-recbar {
+  position: absolute;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 8px 0 10px;
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--overlay-radius);
+  box-shadow: var(--overlay-shadow);
+  cursor: default;
+  z-index: 12;
+}
+.overlay-recdot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #ff3b30;
+  animation: overlay-recblink 1s steps(1, end) infinite;
+}
+@keyframes overlay-recblink {
+  50% {
+    opacity: 0.25;
+  }
+}
+.overlay-rectime {
+  font: 12px/1 ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: var(--overlay-icon);
+  letter-spacing: 0.5px;
+}
+.overlay-recstop {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid #d6372e;
+  border-radius: var(--radius-btn);
+  background: #ff3b30;
+  color: #ffffff;
+  font: 600 12px/1 system-ui, "Segoe UI", sans-serif;
+  cursor: pointer;
+  flex: none;
+}
+.overlay-recstop:hover {
+  background: #ff5b52;
+  border-color: #d6372e;
+}
+.overlay-recstop:active {
+  background: #e6362b;
+}
+.overlay-recstop svg {
+  width: 13px;
+  height: 13px;
+}
+/* 取消录制（×）：中性圆钮，丢弃产物不保存 */
+.overlay-reccancel {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: var(--overlay-hover);
+  color: var(--overlay-icon);
+  font: 16px/1 system-ui, "Segoe UI", sans-serif;
+  cursor: pointer;
+}
+.overlay-reccancel:hover {
+  background: #e0e0e0;
+}
+/* 暂停态：红点停闪（recbar 文案同时显示「已暂停」，两处一起说明状态） */
+.overlay-recdot.paused {
+  animation: none;
+  opacity: 0.35;
+}
+/* 暂停/继续：中性描边钮，与停止键同高（条子高度不跳） */
+.overlay-recpause {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 9px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-btn);
+  background: var(--overlay-hover);
+  color: var(--overlay-icon);
+  font: 600 12px/1 system-ui, "Segoe UI", sans-serif;
+  cursor: pointer;
+  flex: none;
+}
+.overlay-recpause:hover {
+  background: #e0e0e0;
+}
+.overlay-recpause:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.overlay-recpause svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* OCR 结果浮层 */
+.overlay-ocr {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(560px, 72vw);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--popover-bg);
+  border-radius: var(--radius-bar);
+  box-shadow: var(--overlay-shadow);
+  cursor: default;
+  z-index: 14;
+}
+.overlay-ocr-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  font: 13px/1.4 system-ui, "Segoe UI", sans-serif;
+  color: var(--size-label-fg);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+}
+.overlay-ocr-close {
+  width: 24px;
+  height: 24px;
+  border: none;
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--size-label-fg);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+.overlay-ocr-close:hover {
+  color: var(--overlay-icon-active);
+  background: rgba(255, 255, 255, 0.08);
+}
+.overlay-ocr-body {
+  margin: 0;
+  padding: 12px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font: 13px/1.6 ui-monospace, "Cascadia Code", Consolas, monospace;
+  color: var(--size-label-fg);
+  -webkit-user-select: text;
+  user-select: text;
+}
+
+/* 左下角快捷键提示卡（PixPin 同款形态，docs/UI设计规范.md §1.5）：
+   只列真实可用的键——它是可用键的权威展示，避免「界面承诺、代码不兑现」。 */
+.overlay-hints {
+  position: fixed;
+  left: 12px;
+  bottom: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  padding: 8px 10px;
+  background: var(--tip-bg);
+  border-radius: var(--radius-btn);
+  box-shadow: var(--overlay-shadow);
+  pointer-events: none;
+  z-index: 20;
+}
+
+.overlay-hint-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  /* 14px（原 12px → 13px → 14px）：同上，用户反馈文字太小；与工具条放大同步。 */
+  font: 14px/1.5 system-ui, "Segoe UI", sans-serif;
+  color: var(--size-label-fg);
+}
+
+.overlay-hint-row kbd {
+  /* 104px（原 96px）：字号提到 14px 后键名列要更宽才能对齐右侧说明 */
+  min-width: 104px;
+  font: inherit;
+  font-weight: 600;
+  color: #ffffff;
+  opacity: 0.95;
+}
+
+.overlay-hint-row span {
+  opacity: 0.8;
+}
+
+/* ============================================================
+   桌面悬浮条（docs/UI设计规范.md §1.5 real-7，照 PixPin 形态）：
+   白底圆角横条 + 蓝色圆形主按钮，常驻屏幕边缘。
+   窗口就是横条本身的大小——透明像素也吃鼠标事件，常驻大窗会挡住桌面。
+   ============================================================ */
+.ball-bar {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  padding: 0 var(--sp-3);
+  background: var(--card-bg);
+  border: 1px solid var(--border-weak);
+  border-radius: var(--radius-bar);
+  box-shadow: var(--overlay-shadow);
+  cursor: grab;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.ball-bar:active {
+  cursor: grabbing;
+}
+
+.ball-act {
+  width: 34px;
+  height: 34px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: transparent;
+  color: var(--overlay-icon);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.ball-act:hover {
+  background: var(--overlay-hover);
+  color: var(--accent);
+}
+
+.ball-act svg {
+  width: 17px;
+  height: 17px;
+}
+
+.ball-main {
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: var(--radius-chip);
+  background: var(--accent);
+  color: #ffffff;
+  box-shadow: var(--shadow-accent);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.ball-main:hover {
+  background: var(--accent-hover);
+}
+
+.ball-main svg {
+  width: 22px;
+  height: 22px;
+}
+
+/* 保存确认条（capture_confirm_save 开启时）：快速保存 / 另存为… / 删除。
+   底部居中固定，独立于选区（PixPin 的「确认阶段」心智）。 */
+.overlay-savebar {
+  position: fixed;
+  left: 50%;
+  bottom: 16px;
+  transform: translateX(-50%);
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: min(720px, calc(100vw - 32px));
+  height: 40px;
+  padding: 0 10px;
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--overlay-radius);
+  box-shadow: var(--overlay-shadow);
+  cursor: default;
+  z-index: 30;
+}
+
+.overlay-savebar-path {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 13px/1 system-ui, "Segoe UI", sans-serif;
+  color: var(--overlay-icon);
+}
+
+.overlay-savebar-btn {
+  flex: none;
+  height: 26px;
+  padding: 0 12px;
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--radius-btn);
+  background: transparent;
+  color: var(--overlay-icon-active);
+  font: 600 13px/1 system-ui, "Segoe UI", sans-serif;
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-standard);
+}
+
+.overlay-savebar-btn:hover {
+  background: var(--overlay-hover);
+}
+
+.overlay-savebar-danger:hover {
+  color: #d6372e;
+}
+
+/* 回放预览卡（保存确认阶段，mp4/gif）：保存条正上方居中。
+   mp4 = 原生 controls（进度/时间/音量/倍速/全屏自带）；GIF = 循环 <img>。
+   底色走 --overlay-bg，圆角/阴影/边框与保存条同 token，视觉上是同一张卡的两节。 */
+.overlay-savepreview {
+  position: fixed;
+  left: 50%;
+  bottom: 64px; /* 保存条 bottom 16 + 高 40 + 间距 8 */
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 10px;
+  max-width: min(720px, calc(100vw - 32px));
+  background: var(--overlay-bg);
+  border: 1px solid var(--overlay-border);
+  border-radius: var(--overlay-radius);
+  box-shadow: var(--overlay-shadow);
+  cursor: default;
+  z-index: 30;
+}
+
+.overlay-savepreview-media {
+  display: block;
+  max-width: min(660px, calc(100vw - 52px));
+  max-height: 50vh;
+  border-radius: var(--radius-btn);
+  background: #000; /* 视频 letterbox 底：theme.css 无对应 token，组件级局部值 */
+}
+
+.overlay-savepreview-foot {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.overlay-savepreview-hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font: 12px/1 system-ui, "Segoe UI", sans-serif;
+  color: var(--text-muted);
+}
