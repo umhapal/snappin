@@ -7,6 +7,11 @@ Rust core (Windows APIs) + Tauri 2 shell + React overlay UI. No cloud, no accoun
 ![status](https://img.shields.io/badge/status-actively%20developed-2ea043)
 ![license](https://img.shields.io/badge/license-MIT-blue)
 
+| Window capture | Fully local OCR |
+|---|---|
+| ![Window capture](docs/images/window-capture.webp) | ![Offline OCR](docs/images/offline-ocr.webp) |
+| Windows Graphics Capture pulls a window even when other windows cover it. | The same capture fed to the bundled PP-OCRv5 engine — every line comes back with its coordinates, and no pixel leaves the machine. |
+
 ---
 
 Hit one hotkey and a frozen screen appears under your cursor. Pick a window — even one buried under six other windows — drag a box, take the pen, and the PNG is already on your clipboard. The same app records your screen with the system audio, stitches a long page into one image, and reads the text off it without sending a pixel anywhere.
