@@ -9,6 +9,8 @@ Rust core (Windows APIs) + Tauri 2 shell + React overlay UI. No cloud, no accoun
 
 ---
 
+Hit one hotkey and a frozen screen appears under your cursor. Pick a window — even one buried under six other windows — drag a box, take the pen, and the PNG is already on your clipboard. The same app records your screen with the system audio, stitches a long page into one image, and reads the text off it without sending a pixel anywhere.
+
 ## What it does
 
 | Area | Capability |
