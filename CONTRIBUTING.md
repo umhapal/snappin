@@ -37,6 +37,25 @@ cargo check --manifest-path src-tauri/Cargo.toml
 3. Describe **what you changed and how you verified it** (the command you ran, and what you observed). "Should work" is not a verification.
 4. CI runs on `windows-latest`: formatting, `cargo check`, the frontend build, and a release Tauri build. All four must be green.
 
+## Releasing
+
+Releases are built by CI, not by hand. Push a `v*` tag and the `release` workflow
+builds the portable exe, smoke-tests it (it must answer `/v1/health` within 30 s or
+the release is aborted), and publishes the assets.
+
+The OCR engine archive is a separate asset because the models and the ONNX Runtime
+dll are not in this repository. `scripts/build-ocr-engine.mjs` fetches them from
+their upstream sources and verifies every sha256 before packaging:
+
+```bash
+node scripts/build-ocr-engine.mjs --out release-assets
+```
+
+If you bump a model name in `src-tauri/src/ocr.rs`, update the matching sha256 in
+that script — the values are the ones oar-ocr's own download registry enforces, so
+a mismatch means the upstream artifact changed and the pin must be re-checked.
+
+
 ## Reporting bugs
 
 Include the SnapPin version, the Windows version, and the steps to reproduce. If a capture or recording misbehaves, the app log (`%APPDATA%\com.snappin.app\*.log`) is the most useful artefact — please attach the relevant lines.

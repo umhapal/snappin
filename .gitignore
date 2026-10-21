@@ -42,3 +42,6 @@ src-tauri/resources/
 *.msi
 *.exe
 *.appx
+
+# Release 资产(便携 exe 包 / OCR 引擎包,均由 CI 现场构建)
+release-assets/

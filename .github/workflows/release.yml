@@ -1,0 +1,88 @@
+name: Release
+
+# 打 tag 即出 Release 资产：Windows 便携 exe + OCR 引擎包。
+# why-not 本地手工出包：产物不可复现、无法追责；CI 里 MSVC + 固定依赖，出包链路可审计。
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "要发布的 tag（需已存在）"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build Windows release
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.tag || github.ref }}
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Build frontend
+        run: npm run build
+      - name: Release build (MSVC)
+        run: cargo build --release --manifest-path src-tauri/Cargo.toml
+      - name: Collect portable exe
+        shell: pwsh
+        run: |
+          $exe = "src-tauri/target/release/snappin.exe"
+          if (-not (Test-Path $exe)) { throw "exe 未产出: $exe" }
+          $stage = "release-assets/portable"
+          New-Item -ItemType Directory -Force -Path $stage | Out-Null
+          Copy-Item $exe "$stage/snappin.exe"
+          # WebView2Loader.dll 与 exe 同级才能加载；缺了首次启动直接退出且没有提示。
+          $loader = Get-ChildItem "src-tauri/target/release" -Filter "WebView2Loader.dll" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+          if ($loader) { Copy-Item $loader.FullName $stage } else { Write-Host "::warning::未找到 WebView2Loader.dll" }
+          # 烟测：便携版必须能起来并回 /v1/health，否则不发包。
+          # 日志落文件再回显——GUI 子系统程序没有控制台，出错信息只能从文件里拿。
+          $env:SNAPPIN_LOG = "debug"
+          $proc = Start-Process -FilePath "$stage/snappin.exe" -PassThru -WindowStyle Hidden `
+            -RedirectStandardError "release-assets/portable.stderr.log" `
+            -RedirectStandardOutput "release-assets/portable.stdout.log"
+          try {
+            $ok = $false
+            for ($i = 0; $i -lt 30; $i++) {
+              Start-Sleep -Seconds 1
+              try {
+                $r = Invoke-WebRequest -Uri "http://127.0.0.1:47821/v1/health" -TimeoutSec 2 -UseBasicParsing
+                if ($r.StatusCode -eq 200) { $ok = $true; break }
+              } catch {}
+              if ($proc.HasExited) { break }
+            }
+            if (-not $ok) {
+              Write-Host "---- stderr ----"
+              if (Test-Path "release-assets/portable.stderr.log") { Get-Content "release-assets/portable.stderr.log" | Write-Host }
+              Write-Host "---- stdout ----"
+              if (Test-Path "release-assets/portable.stdout.log") { Get-Content "release-assets/portable.stdout.log" | Write-Host }
+              $appLog = Join-Path $env:APPDATA "com.snappin.app"
+              if (Test-Path $appLog) { Get-ChildItem $appLog -Filter "*.log" | ForEach-Object { Get-Content $_.FullName | Write-Host } }
+              throw "便携 exe 未在 30s 内响应 /v1/health，放弃发布"
+            }
+            Write-Host "smoke ok: /v1/health 200"
+          } finally {
+            Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+          }
+          $ver = (Get-Content "src-tauri/tauri.conf.json" | ConvertFrom-Json).version
+          Compress-Archive -Path "$stage/*" -DestinationPath "release-assets/snappin-v$ver-windows-x64.zip" -Force
+          Remove-Item -Recurse -Force $stage
+      - name: Build OCR engine archive
+        # 模型与 onnxruntime.dll 不在本仓库：从上游拉取并逐个校验 sha256，产出可复现的包。
+        run: node scripts/build-ocr-engine.mjs --out release-assets
+      - name: Upload release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag || github.ref_name }}
+          name: SnapPin ${{ github.event.inputs.tag || github.ref_name }}
+          body_path: RELEASE_NOTES.md
+          files: |
+            release-assets/*.zip
