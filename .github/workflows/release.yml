@@ -28,6 +28,21 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - name: Ensure WebView2 runtime
+        # Tauri 建窗走 WebView2;runner 上缺 runtime 的话 exe 会在 setup 阶段直接失败退出,
+        # 烟测必然不过。装一次比事后猜原因便宜。
+        shell: pwsh
+        run: |
+          $key = "HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}"
+          $ver = (Get-ItemProperty $key -ErrorAction SilentlyContinue).pv
+          if ($ver) { Write-Host "WebView2 runtime 已存在: $ver"; exit 0 }
+          Write-Host "WebView2 runtime 缺失,安装中"
+          $url = "https://go.microsoft.com/fwlink/p/?LinkId=2124703"
+          Invoke-WebRequest -Uri $url -OutFile "$env:RUNNER_TEMP\WebView2Setup.exe"
+          Start-Process "$env:RUNNER_TEMP\WebView2Setup.exe" -ArgumentList "/silent","/install" -Wait
+          $ver = (Get-ItemProperty $key -ErrorAction SilentlyContinue).pv
+          if (-not $ver) { throw "WebView2 runtime 安装失败" }
+          Write-Host "WebView2 runtime 安装完成: $ver"
       - name: Build frontend
         run: npm run build
       - name: Release build (MSVC)
