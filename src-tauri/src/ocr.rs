@@ -61,7 +61,7 @@ fn engine_dir() -> PathBuf {
     }
     if let Some(exe_dir) = std::env::current_exe()
         .ok()
-        .and_then(|p| p.parent().map(Path::to_path_buf))
+        .and_then(|p| p.parent().map(|d| d.to_path_buf()))
     {
         return exe_dir.join("engines").join("oar-ocr");
     }

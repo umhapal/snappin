@@ -35,6 +35,10 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # tauri 的 generate_context! 宏在编译期要求 frontendDist（../dist）存在，
+      # why-not 只 cargo check：宏展开即校验该路径，缺 dist 直接 panic。
+      - name: Build frontend
+        run: npm run build
       - name: Check formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
       - name: cargo check
